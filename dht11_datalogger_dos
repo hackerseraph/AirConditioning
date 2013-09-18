@@ -61,7 +61,7 @@ void setup()
   Serial.print("LIBRARY VERSION: ");
   Serial.println(DHT11LIB_VERSION);
   Serial.println();
-}/*--(end setup )---*/
+}
 
   Serial.print("Initializing SD card...");
   // make sure that the default chip select pin is set to
@@ -75,7 +75,13 @@ void setup()
     return;
   }
   Serial.println("card initialized.");
+  
+File dataFile = SD.open("readings.txt", FILE_WRITE);
+dataFile.println("Begin New Reading");
+dataFile.close();
 }
+
+
 
 void loop()
 {
@@ -134,12 +140,12 @@ void loop()
   Serial.print("Dew PointFastDOS (oC): ");
   Serial.println(dewPointFast(DHT11DOS.temperature, DHT11DOS.humidity));
   
-  dataFile.println(Temperature);
+  dataFile.print("Temperature Sensor 1: ");
   dataFile.println(DHT11.temperature);
+  dataFile.print("Temperature Sensor 2: ");
   dataFile.println(DHT11DOS.temperature);
   dataFile.println();
   dataFile.close();
 
   delay(2000);
-
 }
