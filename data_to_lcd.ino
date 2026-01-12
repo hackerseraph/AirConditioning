@@ -1,24 +1,32 @@
 #include <LiquidCrystal.h>
-#include <DFR_Key.h>
+#include <Servo.h>
 #include <dht11.h>
 #include "startup_messages.h"
 
-
-#define DHT11PIN 2
-#define DHT11PINDOS 3
-
-// Button pin assignments
-#define SERVO_ON_BTN 10
-#define SERVO_OFF_BTN 11
-#define TEMP_UP_BTN 12
-#define TEMP_DOWN_BTN 13
+// ESP32 Pin Assignments
+#define DHT11PIN 32
+#define SERVO_PIN 33
+#define RELAY_PIN 25
+#define AC_MODE_BTN 26
+#define HEAT_MODE_BTN 27
+#define TEMP_UP_BTN 14
+#define TEMP_DOWN_BTN 12
 
 dht11 DHT11;
-dht11 DHT11DOS;
+
+// Servo and relay control
+Servo ventServo;
+const int SERVO_OPEN = 90;      // Servo angle to open flaps
+const int SERVO_CLOSED = 0;     // Servo angle to close flaps
 
 // Servo and temperature state variables
 int setTemperature = 72;  // Default set temperature in Fahrenheit
-bool servoActive = false;  // Servo on/off state
+bool flapsOpen = false;   // Flap open/closed state
+bool relayActive = false; // Relay on/off state
+
+// Low power optimization
+unsigned long lastDisplayUpdate = 0;
+const unsigned long displayUpdateInterval = 1000;  // Update display every 1 second for low power
 
 //Pin assignments for SainSmart LCD Keypad Shield
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7); 
@@ -80,6 +88,12 @@ void setup()
   pinMode(TEMP_UP_BTN, INPUT_PULLUP);
   pinMode(TEMP_DOWN_BTN, INPUT_PULLUP);
   
+  // Initialize servo and relay
+  ventServo.attach(SERVO_PIN);
+  ventServo.write(SERVO_CLOSED);  // Start with flaps closed
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);   // Start with relay off
+  
   randomSeed(analogRead(0));  // Seed random number generator
   
   // Display 10 random startup messages
@@ -106,12 +120,20 @@ void handleButtons()
   unsigned long currentTime = millis();
   if (currentTime - lastButtonPress < debounceDelay) return;
   
-  if (digitalRead(SERVO_ON_BTN) == LOW) {
-    servoActive = true;
+  if (digitalRead(AC_MODE_BTN) == LOW) {
+    // Open flaps and activate relay for cooling
+    ventServo.write(SERVO_OPEN);
+    digitalWrite(RELAY_PIN, HIGH);
+    flapsOpen = true;
+    relayActive = true;
     lastButtonPress = currentTime;
   }
-  else if (digitalRead(SERVO_OFF_BTN) == LOW) {
-    servoActive = false;
+  else if (digitalRead(HEAT_MODE_BTN) == LOW) {
+    // Close flaps and deactivate relay
+    ventServo.write(SERVO_CLOSED);
+    digitalWrite(RELAY_PIN, LOW);
+    flapsOpen = false;
+    relayActive = false;
     lastButtonPress = currentTime;
   }
   else if (digitalRead(TEMP_UP_BTN) == LOW) {
@@ -126,8 +148,8 @@ void handleButtons()
   }
 }
 
-String getServoStatus() {
-  return servoActive ? "SERVO:ON" : "SERVO:OFF";
+String getFlapsStatus() {
+  return flapsOpen ? "FLAPS:OPEN" : "FLAPS:CLOSED";
 }
 
 void loop() 
@@ -137,19 +159,25 @@ void loop()
   
   double currentTempF = Fahrenheit(DHT11.temperature);
   
-  lcd.begin(16, 2);
-  lcd.setCursor(0, 0);
-  lcd.print(getServoStatus());
-  lcd.setCursor(0, 1);
-  lcd.print("Set:");
-  lcd.setCursor(5, 1);
-  lcd.print(setTemperature);
-  lcd.print("F ");
-  lcd.setCursor(9, 1);
-  lcd.print("Now:");
-  lcd.setCursor(13, 1);
-  lcd.print(currentTempF, 0);
-  lcd.print("F");
+  // Update display at reduced interval for low power
+  unsigned long currentTime = millis();
+  if (currentTime - lastDisplayUpdate >= displayUpdateInterval) {
+    lcd.begin(16, 2);
+    lcd.setCursor(0, 0);
+    lcd.print(getFlapsStatus());
+    lcd.setCursor(0, 1);
+    lcd.print("Set:");
+    lcd.setCursor(5, 1);
+    lcd.print(setTemperature);
+    lcd.print("F ");
+    lcd.setCursor(9, 1);
+    lcd.print("Now:");
+    lcd.setCursor(13, 1);
+    lcd.print(currentTempF, 0);
+    lcd.print("F");
+    
+    lastDisplayUpdate = currentTime;
+  }
   
-  delay(100);
+  delay(50);  // Reduced delay for low power mode
 }
