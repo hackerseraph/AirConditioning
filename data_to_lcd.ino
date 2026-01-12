@@ -1,13 +1,24 @@
 #include <LiquidCrystal.h>
 #include <DFR_Key.h>
 #include <dht11.h>
+#include "startup_messages.h"
 
 
 #define DHT11PIN 2
 #define DHT11PINDOS 3
 
+// Button pin assignments
+#define SERVO_ON_BTN 10
+#define SERVO_OFF_BTN 11
+#define TEMP_UP_BTN 12
+#define TEMP_DOWN_BTN 13
+
 dht11 DHT11;
 dht11 DHT11DOS;
+
+// Servo and temperature state variables
+int setTemperature = 72;  // Default set temperature in Fahrenheit
+bool servoActive = false;  // Servo on/off state
 
 //Pin assignments for SainSmart LCD Keypad Shield
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7); 
@@ -56,37 +67,89 @@ DFR_Key keypad;
 
 int localKey = 0;
 String keyString = "";
+unsigned long lastButtonPress = 0;
+const unsigned long debounceDelay = 200;  // Debounce delay in milliseconds
                  
 void setup() 
 { 
   lcd.begin(16, 2);
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Warming UP...");
-  delay(2000);
-  lcd.clear();
-  lcd.print("Chasing Zombies");
-  delay(1500);
+  
+  // Initialize button pins
+  pinMode(AC_MODE_BTN, INPUT_PULLUP);
+  pinMode(HEAT_MODE_BTN, INPUT_PULLUP);
+  pinMode(TEMP_UP_BTN, INPUT_PULLUP);
+  pinMode(TEMP_DOWN_BTN, INPUT_PULLUP);
+  
+  randomSeed(analogRead(0));  // Seed random number generator
+  
+  // Display 10 random startup messages
+  for (int i = 0; i < 10; i++) {
+    int randomIndex = random(messageCount);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print(startupMessages[randomIndex]);
+    delay(800);
+  }
+  
+  // Final boot message
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("Let The Games");
   lcd.setCursor(0,1);
   lcd.print("Begin :)");
-  delay(3000);
+  delay(2000);
   lcd.clear();
+}
+
+void handleButtons() 
+{
+  unsigned long currentTime = millis();
+  if (currentTime - lastButtonPress < debounceDelay) return;
+  
+  if (digitalRead(SERVO_ON_BTN) == LOW) {
+    servoActive = true;
+    lastButtonPress = currentTime;
+  }
+  else if (digitalRead(SERVO_OFF_BTN) == LOW) {
+    servoActive = false;
+    lastButtonPress = currentTime;
+  }
+  else if (digitalRead(TEMP_UP_BTN) == LOW) {
+    setTemperature++;
+    if (setTemperature > 85) setTemperature = 85;  // Max 85F
+    lastButtonPress = currentTime;
+  }
+  else if (digitalRead(TEMP_DOWN_BTN) == LOW) {
+    setTemperature--;
+    if (setTemperature < 60) setTemperature = 60;  // Min 60F
+    lastButtonPress = currentTime;
+  }
+}
+
+String getServoStatus() {
+  return servoActive ? "SERVO:ON" : "SERVO:OFF";
 }
 
 void loop() 
 { 
-  
   int chk = DHT11.read(DHT11PIN);
+  handleButtons();
+  
+  double currentTempF = Fahrenheit(DHT11.temperature);
   
   lcd.begin(16, 2);
-  lcd.setCursor(0,0);
-  lcd.print("Current Temp F");
+  lcd.setCursor(0, 0);
+  lcd.print(getServoStatus());
   lcd.setCursor(0, 1);
-  lcd.print(Fahrenheit(DHT11.temperature), 2);
-  lcd.setCursor(9,1);
-  lcd.print("Degrees");
-  delay(2000);
+  lcd.print("Set:");
+  lcd.setCursor(5, 1);
+  lcd.print(setTemperature);
+  lcd.print("F ");
+  lcd.setCursor(9, 1);
+  lcd.print("Now:");
+  lcd.setCursor(13, 1);
+  lcd.print(currentTempF, 0);
+  lcd.print("F");
+  
+  delay(100);
 }
